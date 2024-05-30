@@ -17,6 +17,7 @@ While GeoLambda was initially intended for AWS Lambda it is also useful as a bas
 | 1.2.0     | 2.4.2 | Separate Python (3.7.4) image and Lambda Layer added |
 | 2.0.0		| 3.0.1 | libgeotiff 1.5.1, proj 6.2.0 |
 | 2.1.0		| 3.2.1 | libgeotiff 1.6.0, proj 7.2.1, openjpeg 2.4.0, Python layer 3.7.9 |
+| 3.0.0		| 3.9.0 | libgeotiff 1.7.2, proj 9.4.0, openjpeg 2.5.0, Python layer 3.10.14 |
 
 #### Environment variables
 
