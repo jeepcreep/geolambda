@@ -1,15 +1,17 @@
-FROM lambci/lambda:build-provided
+#FROM lambci/lambda:build-provided
+FROM danger89/cmake:latest
 
 LABEL maintainer="Development Seed <info@developmentseed.org>"
-LABEL authors="Matthew Hanson  <matt.a.hanson@gmail.com>"
+LABEL authors="Matthew Hanson  <matt.a.hanson@gmail.com>, Nils Weber <nilsweber@gmx.de>"
+
+RUN apt-get -y update && apt-get -y upgrade
 
 # install system libraries
 RUN \
-    yum makecache fast; \
-    yum install -y wget libpng-devel nasm rsync; \
-    yum install -y bash-completion --enablerepo=epel; \
-    yum clean all; \
-    yum autoremove
+    apt-get -y install wget libpng-dev libglib2.0-dev nasm rsync; \
+    apt-get -y install bash-completion openssl libssl-dev; \
+    apt-get -y install openssl; \
+    apt-get clean all;
 
 # versions of packages
 ENV \
@@ -17,8 +19,8 @@ ENV \
     PROJ_VERSION=9.4.0 \
     GEOS_VERSION=3.12.1 \
     GEOTIFF_VERSION=1.7.2 \
-    HDF4_VERSION=4.3.0 \
-    HDF5_VERSION=1.14.4 \
+    HDF4_VERSION=4.2.16 \
+    HDF5_VERSION=1.14.3 \
     NETCDF_VERSION=4.9.2 \
     NGHTTP2_VERSION=1.62.0 \
     OPENJPEG_VERSION=2.5.0 \
@@ -53,6 +55,32 @@ RUN \
     make -j ${NPROC} install; \
     cd ../; rm -rf pkg-config
 
+# nghttp2
+RUN \
+    mkdir nghttp2; \
+    wget -qO- https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.gz \
+        | tar xvz -C nghttp2 --strip-components=1; cd nghttp2; \
+    ./configure --enable-lib-only --prefix=${PREFIX}; \
+    make -j ${NPROC} install; \
+    cd ..; rm -rf nghttp2
+
+# curl
+RUN \
+    mkdir curl; \
+    wget -qO- https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.gz \
+        | tar xvz -C curl --strip-components=1; cd curl; \
+    ./configure --prefix=${PREFIX} --disable-manual --disable-cookies --with-nghttp2=${PREFIX} --with-openssl; \
+    make -j ${NPROC} install; \
+    cd ..; rm -rf curl
+
+# Open SSL is needed for building Python so it's included here for ease
+# RUN \
+#     mkdir openssl; \
+#     wget -qO- https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz \
+#         | tar xvz -C openssl --strip-components=1; cd openssl; \
+#     ./config shared --prefix=${PREFIX}/openssl --openssldir=${PREFIX}/openssl; \
+#     make depend; make install; cd ..; rm -rf openssl
+
 # sqlite3 (required by proj)
 RUN \
     mkdir sqlite3; \
@@ -70,25 +98,6 @@ RUN \
     SQLITE3_LIBS="=L$PREFIX/lib -lsqlite3" SQLITE3_INCLUDE_DIRS=$PREFIX/include/proj ./configure --prefix=$PREFIX; \
     make -j ${NPROC} install; \
     cd ..; rm -rf proj
-
-
-# nghttp2
-RUN \
-    mkdir nghttp2; \
-    wget -qO- https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.gz \
-        | tar xvz -C nghttp2 --strip-components=1; cd nghttp2; \
-    ./configure --enable-lib-only --prefix=${PREFIX}; \
-    make -j ${NPROC} install; \
-    cd ..; rm -rf nghttp2
-
-# curl
-RUN \
-    mkdir curl; \
-    wget -qO- https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.gz \
-        | tar xvz -C curl --strip-components=1; cd curl; \
-    ./configure --prefix=${PREFIX} --disable-manual --disable-cookies --with-nghttp2=${PREFIX}; \
-    make -j ${NPROC} install; \
-    cd ..; rm -rf curl
 
 # GEOS
 RUN \
@@ -192,38 +201,62 @@ RUN \
     mkdir gdal; \
     wget -qO- http://download.osgeo.org/gdal/$GDAL_VERSION/gdal-$GDAL_VERSION.tar.gz \
         | tar xvz -C gdal --strip-components=1; cd gdal; \
-    ./configure \
-        --disable-debug \
-        --disable-static \
-        --prefix=${PREFIX} \
-        --with-openjpeg \
-        --with-geotiff=${PREFIX} \
-        --with-hdf4=${PREFIX} \
-        --with-hdf5=${PREFIX} \
-        --with-netcdf=${PREFIX} \
-        --with-webp=${PREFIX} \
-        --with-zstd=${PREFIX} \
-        --with-jpeg=${PREFIX} \
-        --with-threads=yes \
-        --with-sqlite3=$PREFIX \
-        --with-curl=${PREFIX}/bin/curl-config \
-        --without-python \
-        --without-libtool \
-        --disable-driver-elastic \
-        --with-geos=$PREFIX/bin/geos-config \
-        --with-hide-internal-symbols=yes \
-        CFLAGS="-O2 -Os" CXXFLAGS="-O2 -Os" \
-        LDFLAGS="-Wl,-rpath,'\$\$ORIGIN'"; \
-    make -j ${NPROC} install; \
+    cmake \
+        -DCMAKE_INSTALL_PREFIX=${PREFIX} \
+        -DGDAL_USE_OPENJPEG=ON \
+        -DGDAL_USE_GEOTIFF=ON \
+        -DGEOTIFF_INCLUDE_DIR=${PREFIX} \
+        -DGDAL_USE_HDF4=ON \
+        -DHDF4_INCLUDE_DIR=${PREFIX} \
+        -DGDAL_USE_HDF5=ON \
+        -DHDF5_INCLUDE_DIR=${PREFIX} \
+        -DGDAL_USE_NETCDF=ON \
+        -DNETCDF_INCLUDE_DIR=${PREFIX} \
+        -DGDAL_USE_WEBP=ON \
+        -DWEBP_INCLUDE_DIR=${PREFIX} \
+        -DGDAL_USE_ZSTD=ON \
+        -DZSTD_INCLUDE_DIR=${PREFIX} \
+        -DGDAL_USE_JPEG=ON \
+        -DJPEG_INCLUDE_DIR=${PREFIX} \
+        -DGDAL_USE_SQLITE3=ON \
+        -DSQLite3_INCLUDE_DIR=$PREFIX \
+        -DGDAL_USE_CURL=ON \
+        -DCURL_INCLUDE_DIR=${PREFIX}/bin/curl-config \
+        -DBUILD_PYTHON_BINDINGS:BOOL=OFF \
+        -DOGR_ENABLE_DRIVER_ELASTIC:BOOL=OFF \
+        -DGDAL_USE_GEOS=ON \
+        -DGEOS_INCLUDE_DIR=$PREFIX/bin/geos-config \
+        -DPROJ_INCLUDE_DIR=${PREFIX} \
+        -DCMAKE_C_FLAGS="-O2 -Os" \
+        -DCMAKE_CXX_FLAGS="-O2 -Os" \
+        -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath,'\$\$ORIGIN'" .; \
+    cmake --build . --parallel 4 \
+    cmake --build . --parallel 4 --target install \
     cd ${BUILD}; rm -rf gdal
-
-# Open SSL is needed for building Python so it's included here for ease
-RUN \
-    mkdir openssl; \
-    wget -qO- https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz \
-        | tar xvz -C openssl --strip-components=1; cd openssl; \
-    ./config shared --prefix=${PREFIX}/openssl --openssldir=${PREFIX}/openssl; \
-    make depend; make install; cd ..; rm -rf openssl
+    # ./configure \
+    #     --disable-debug \
+    #     --disable-static \
+    #     --prefix=${PREFIX} \
+    #     --with-openjpeg \
+    #     --with-geotiff=${PREFIX} \
+    #     --with-hdf4=${PREFIX} \
+    #     --with-hdf5=${PREFIX} \
+    #     --with-netcdf=${PREFIX} \
+    #     --with-webp=${PREFIX} \
+    #     --with-zstd=${PREFIX} \
+    #     --with-jpeg=${PREFIX} \
+    #     --with-threads=yes \
+    #     --with-sqlite3=$PREFIX \
+    #     --with-curl=${PREFIX}/bin/curl-config \
+    #     --without-python \
+    #     --without-libtool \
+    #     --disable-driver-elastic \
+    #     --with-geos=$PREFIX/bin/geos-config \
+    #     --with-hide-internal-symbols=yes \
+    #     CFLAGS="-O2 -Os" CXXFLAGS="-O2 -Os" \
+    #     LDFLAGS="-Wl,-rpath,'\$\$ORIGIN'"; \
+    # make -j ${NPROC} install; \
+    # cd ${BUILD}; rm -rf gdal
 
 
 # Copy shell scripts and config files over

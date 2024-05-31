@@ -1,5 +1,5 @@
-ARG VERSION=3.0.0
-FROM developmentseed/geolambda:${VERSION}
+ARG VERSION=3.0.1
+FROM jeepcreep/geolambda:${VERSION}
 
 LABEL maintainer="Development Seed <info@developmentseed.org>"
 LABEL authors="Matthew Hanson  <matt.a.hanson@gmail.com>"
@@ -9,7 +9,8 @@ ARG PYVERSION=3.10.14
 # install Python
 ENV \
     PYENV_ROOT=/root/.pyenv \
-    PATH=/root/.pyenv/shims:/root/.pyenv/bin:$PATH
+    PATH=/root/.pyenv/shims:/root/.pyenv/bin:$PATH \
+    GDAL_CONFIG=/usr/local/bin/gdal-config
 
 RUN \
     curl https://pyenv.run | bash; \
@@ -17,12 +18,12 @@ RUN \
         LD_RUN_PATH="${PREFIX}/openssl/lib" \
         pyenv install ${PYVERSION}; \
     pyenv global ${PYVERSION}; \
-    pip install --upgrade pip
+    pip3 install --upgrade pip
 
 COPY requirements*.txt ./
 
 RUN \
-    pip install -r requirements-pre.txt; \
-    pip install -r requirements.txt
+    pip3 install -r requirements-pre.txt; \
+    pip3 install -r requirements.txt
 
 COPY bin/* /usr/local/bin/
