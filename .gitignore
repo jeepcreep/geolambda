@@ -2,5 +2,5 @@
 lambda-deploy.zip
 lambda-layer-deploy.zip
 .DS_Store
-lambda/share/
-lambda/lib/
+**/lambda/lib/**
+**/lambda/share/
